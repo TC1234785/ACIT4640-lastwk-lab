@@ -1,5 +1,3 @@
-# configure version of aws provider plugin
-# https://developer.hashicorp.com/terraform/language/terraform#terraform
 terraform {
   required_providers {
     aws = {
@@ -13,3 +11,4 @@ terraform {
 provider "aws" {
   region = "us-west-2"
 }
+
