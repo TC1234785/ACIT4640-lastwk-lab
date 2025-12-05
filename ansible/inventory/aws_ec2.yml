@@ -1,0 +1,17 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-west-2
+# Set individual Variables
+compose:
+  ansible_host: public_dns_name
+# Set the Inventory Hostname to be the EC2 Tag Name value without any prefix or separator
+hostnames:
+  - name: tag:Name
+    separator: ""
+    prefix: ""
+# Create groups based on tags
+keyed_groups:
+  # Create a group for each Name Tag
+  - key: tags.Name
+    prefix: ""
+    separator: ""

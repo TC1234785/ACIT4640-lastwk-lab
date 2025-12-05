@@ -1,18 +1,47 @@
 ---
-- name: Configure Web and Database Servers
-  hosts: all
+- name: Configure Web Server
+  hosts: Web
   become: true
   gather_facts: yes
+  vars:
+    ansible_user: admin
 
   tasks:
-    - name: Install nginx on Debian-based systems
+    - name: Install nginx on Debian
       ansible.builtin.apt:
         name: nginx
         state: present
         update_cache: yes
       when: ansible_facts['os_family'] == 'Debian'
 
-    - name: Install nginx on RedHat-based systems
+    - name: Start and enable nginx service
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Deploy index.html from template
+      ansible.builtin.template:
+        src: templates/index.html.j2
+        dest: /var/www/html/index.html
+        mode: '0644'
+      notify: restart nginx
+
+  handlers:
+    - name: restart nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+
+- name: Configure Database Server
+  hosts: Database
+  become: true
+  gather_facts: yes
+  vars:
+    ansible_user: rocky
+
+  tasks:
+    - name: Install nginx on Rocky Linux
       ansible.builtin.dnf:
         name: nginx
         state: present
