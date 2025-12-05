@@ -1,28 +1,60 @@
 # specify a project name
 locals {
-  project_name = "lab_week_11"
+  project_name = "week_12_lab"
 }
 
-# get the most recent ami for Debian 13 owned by Debian
+# Data source for Debian 13 AMI
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami
 data "aws_ami" "debian" {
   most_recent = true
-  owners      = ["136693071363"] # Debian official owner ID
+  owners      = ["136693071363"] # Debian official
 
   filter {
     name   = "name"
-    values = ["debian-13-amd64-*"]
+    values = ["debian-13-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+# Data source for Rocky Linux AMI
+# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami
+data "aws_ami" "rocky" {
+  most_recent = true
+  owners      = ["792107900819"] # Rocky Linux official
+
+  filter {
+    name   = "name"
+    values = ["Rocky-9-EC2-Base-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 }
 
 # Create a VPC
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc
-resource "aws_vpc" "web" {
+resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
 
   tags = {
-    Name    = "project_vpc"
+    Name    = "week12_vpc"
     Project = local.project_name
   }
 }
@@ -31,66 +63,72 @@ resource "aws_vpc" "web" {
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet
 # To use the free tier t2.micro ec2 instance you have to declare an AZ
 # Some AZs do not support this instance type
-resource "aws_subnet" "web" {
-  vpc_id                  = aws_vpc.web.id
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
   availability_zone       = "us-west-2a"
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "Web"
+    Name    = "public_subnet"
+    Project = local.project_name
   }
 }
 
 # Create internet gateway for VPC
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway
-resource "aws_internet_gateway" "web-gw" {
-  vpc_id = aws_vpc.web.id
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "Web"
+    Name    = "week12_igw"
+    Project = local.project_name
   }
 }
 
-# create route table for web VPC 
+# create route table for VPC 
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table
-resource "aws_route_table" "web" {
-  vpc_id = aws_vpc.web.id
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "web-route"
+    Name    = "public_route_table"
+    Project = local.project_name
   }
 }
 
-# add route to to route table
+# add route to route table
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route
 resource "aws_route" "default_route" {
-  route_table_id         = aws_route_table.web.id
+  route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.web-gw.id
+  gateway_id             = aws_internet_gateway.main.id
 }
 
+# associate route table with subnet
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association
-resource "aws_route_table_association" "web" {
-  subnet_id      = aws_subnet.web.id
-  route_table_id = aws_route_table.web.id
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
 }
 
+# Security group for both instances
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group
-resource "aws_security_group" "web" {
-  name        = "allow_ssh"
-  description = "allow ssh from home and work"
-  vpc_id      = aws_vpc.web.id
+resource "aws_security_group" "main" {
+  name        = "week12_security_group"
+  description = "Allow SSH and HTTP"
+  vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name = "Web"
+    Name    = "week12_sg"
+    Project = local.project_name
   }
 }
 
 # Allow ssh
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule
-resource "aws_vpc_security_group_ingress_rule" "web-ssh" {
-  security_group_id = aws_security_group.web.id
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  security_group_id = aws_security_group.main.id
 
   cidr_ipv4   = "0.0.0.0/0"
   from_port   = 22
@@ -100,8 +138,8 @@ resource "aws_vpc_security_group_ingress_rule" "web-ssh" {
 
 # allow http
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule
-resource "aws_vpc_security_group_ingress_rule" "web-http" {
-  security_group_id = aws_security_group.web.id
+resource "aws_vpc_security_group_ingress_rule" "http" {
+  security_group_id = aws_security_group.main.id
 
   cidr_ipv4   = "0.0.0.0/0"
   from_port   = 80
@@ -109,57 +147,70 @@ resource "aws_vpc_security_group_ingress_rule" "web-http" {
   to_port     = 80
 }
 
-# allow all out
+# allow all outbound
 # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule
-resource "aws_vpc_security_group_egress_rule" "web-egress" {
-  security_group_id = aws_security_group.web.id
+resource "aws_vpc_security_group_egress_rule" "egress" {
+  security_group_id = aws_security_group.main.id
 
   cidr_ipv4   = "0.0.0.0/0"
   ip_protocol = -1
 }
 
-#===========================================================================
-#
-# THIS IS THE DATABSE 
-#
-#===========================================================================
+# Web Server EC2 instance (Debian 13)
+# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance
+resource "aws_instance" "web" {
+  ami                    = data.aws_ami.debian.id
+  instance_type          = "t2.micro"
+  key_name               = "aws-4640"
+  vpc_security_group_ids = [aws_security_group.main.id]
+  subnet_id              = aws_subnet.public.id
 
+  user_data = <<-EOF
+              #!/bin/bash
+              apt-get update
+              apt-get install -y python3
+              EOF
 
-module "database" {
-  source                 = "./modules/web-server/"
-  project_name           = local.project_name 
-  ec2_name               = "Database"
-  ec2_role               = "database_server"
-  ami                    = "ami-093bd987f8e53e1f2" # Rocky Linux
-  key_name               = "aws-4640"                  
-  vpc_security_group_ids = [aws_security_group.web.id] 
-  subnet_id              = aws_subnet.web.id           
-}
-  
-#===========================================================================
-#
-# WEBSERVER 
-#
-#===========================================================================
-
-module "web" {
-  source                 = "./modules/web-server/"
-  project_name           = local.project_name # project name from local
-  ec2_name               = "Web"
-  ec2_role               = "web_server"
-  ami                    = data.aws_ami.debian.id      
-  key_name               = "aws-4640"                  
-  vpc_security_group_ids = [aws_security_group.web.id]
-  subnet_id              = aws_subnet.web.id          
+  tags = {
+    Name    = "Web"
+    Project = local.project_name
+  }
 }
 
+# Database Server EC2 instance (Rocky Linux)
+# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance
+resource "aws_instance" "database" {
+  ami                    = data.aws_ami.rocky.id
+  instance_type          = "t2.micro"
+  key_name               = "aws-4640"
+  vpc_security_group_ids = [aws_security_group.main.id]
+  subnet_id              = aws_subnet.public.id
 
+  user_data = <<-EOF
+              #!/bin/bash
+              dnf install -y python3
+              EOF
+
+  tags = {
+    Name    = "Database"
+    Project = local.project_name
+  }
+}
+
+# Output IP addresses and connection info
+# https://developer.hashicorp.com/terraform/language/values/outputs
 output "web_server" {
-  description = "output for web server ec2"
-  value       = module.web.instance_ip_addr
+  description = "Web server public IP and DNS"
+  value = {
+    "public_ip" = aws_instance.web.public_ip
+    "dns_name"  = aws_instance.web.public_dns
+  }
 }
 
 output "database_server" {
-  description = "output for database server ec2"
-  value       = module.database.instance_ip_addr
+  description = "Database server public IP and DNS"
+  value = {
+    "public_ip" = aws_instance.database.public_ip
+    "dns_name"  = aws_instance.database.public_dns
+  }
 }
