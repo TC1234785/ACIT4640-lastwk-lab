@@ -1,0 +1,42 @@
+- name: Setup Redis and Frontend Servers
+  hosts:
+    - server_role_redis_server
+    - server_role_frontend_server
+  become: true
+  gather_facts: yes # Collect facts only once for the entire play
+
+  vars:
+    # Set remote_user conditionally for each server role
+    ansible_user: "{{ 'rocky' if 'server_role_redis_server' in group_names else 'ubuntu' }}"
+  tasks:
+    # Tasks for Redis Servers
+    - name: Install redis on Rocky Linux
+      ansible.builtin.dnf:
+        name: redis
+        state: present
+      when: "'server_role_redis_server' in group_names and ansible_facts['distribution'] == 'Rocky'"
+    # Tasks for Frontend Servers
+    - name: Install nginx on Ubuntu
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+      when: "'server_role_frontend_server' in group_names and ansible_facts['distribution'] == 'Ubuntu'"
+    # Create index.html using a template
+    - name: create index.html
+      ansible.builtin.template:
+        src: index.html.j2 # Ensure you have the file "index.html.j2" in your templates directory
+        dest: /var/www/html/index.html
+      when: "'server_role_frontend_server' in group_names and ansible_facts['distribution'] == 'Ubuntu'"
+    # Create nginx configuration file
+    - name: create nginx configuration
+      ansible.builtin.copy:
+        src: default.conf # Ensure you have the file "default.conf" in your files directory
+        dest: /etc/nginx/sites-available/default
+      when: "'server_role_frontend_server' in group_names and ansible_facts['distribution'] == 'Ubuntu'"
+    # Enable nginx configuration by creating a symlink
+    - name: enable nginx configuration
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/default
+        dest: /etc/nginx/sites-enabled/default
+        state: link
+      when: "'server_role_frontend_server' in group_names and ansible_facts['distribution'] == 'Ubuntu'"

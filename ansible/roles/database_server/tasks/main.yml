@@ -1,0 +1,24 @@
+---
+- name: Install nginx on Rocky Linux
+  ansible.builtin.dnf:
+    name: nginx
+    state: present
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: create index.html
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /usr/share/nginx/html/index.html
+  notify: restart nginx
+
+- name: create nginx configuration
+  ansible.builtin.copy:
+    src: default.conf
+    dest: /etc/nginx/conf.d/default.conf
+  notify: restart nginx
+
+- name: ensure nginx is started
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

@@ -1,0 +1,25 @@
+---
+- name: Install nginx on Ubuntu
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: create index.html
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+  notify: restart nginx
+
+- name: create nginx configuration
+  ansible.builtin.copy:
+    src: default.conf
+    dest: /etc/nginx/sites-available/default
+  notify: restart nginx
+
+- name: enable nginx configuration
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/default
+    dest: /etc/nginx/sites-enabled/default
+    state: link
+  notify: restart nginx

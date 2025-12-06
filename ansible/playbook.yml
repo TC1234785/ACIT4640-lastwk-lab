@@ -1,0 +1,20 @@
+---
+- name: Configure Database Servers
+  hosts: server_role_database_server
+  become: true
+  gather_facts: true
+  vars:
+    ansible_user: rocky
+    server_message: "Hello from database"
+  roles:
+    - database_server
+
+- name: Configure Web Servers
+  hosts: server_role_web_server
+  become: true
+  gather_facts: true
+  vars:
+    ansible_user: admin
+    server_message: "Hello from web"
+  roles:
+    - web_server
